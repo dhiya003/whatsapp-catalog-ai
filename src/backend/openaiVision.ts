@@ -58,7 +58,7 @@ async function extractWithGemini(input: IncomingMessage): Promise<CatalogItem | 
 function mergeAiJson(input: IncomingMessage, raw: unknown, provider: AiProvider): CatalogItem | null {
   const base = extractCatalogDraft(input);
   if (!base) return null;
-  const parsed = aiJsonSchema.safeParse(raw);
+  const parsed = aiJsonSchema.safeParse(normalizeAiJson(raw));
   if (!parsed.success) return { ...base, aiProvider: 'rules', extractedBy: 'rules', confidence: Math.min(base.confidence, 0.4) };
   const candidate = {
     ...base,
@@ -78,6 +78,35 @@ function mergeAiJson(input: IncomingMessage, raw: unknown, provider: AiProvider)
     confidence: parsed.data.confidence ?? Math.max(base.confidence, 0.78)
   };
   return catalogItemSchema.parse(candidate);
+}
+
+function normalizeAiJson(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const allowed = new Set(Object.keys(aiJsonSchema.shape));
+  const normalized: Record<string, unknown> = {};
+  const arrayFields = new Set(['sizes', 'careInstructions', 'bulletPoints', 'keywords']);
+  const stringFields = new Set(['title', 'category', 'fabric', 'weave', 'feel', 'color', 'occasion', 'price', 'currency', 'seoTitle', 'shortDescription', 'longDescription', 'metaTitle', 'metaDescription', 'imageAltText', 'geoSummary']);
+  for (const [key, value] of Object.entries(source)) {
+    if (!allowed.has(key) || value === null || value === undefined) continue;
+    if (arrayFields.has(key)) {
+      normalized[key] = Array.isArray(value) ? value.map(String).filter(Boolean) : String(value).split(/[\n,;]+/).map((entry) => entry.trim()).filter(Boolean);
+    } else if (stringFields.has(key)) {
+      normalized[key] = Array.isArray(value) ? value.map(String).join(', ') : String(value);
+    } else if (key === 'confidence') {
+      const confidence = Number(value);
+      if (Number.isFinite(confidence)) normalized[key] = Math.max(0, Math.min(1, confidence > 1 ? confidence / 100 : confidence));
+    } else if (key === 'faq') {
+      const entries = Array.isArray(value) ? value : [value];
+      normalized[key] = entries.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') return [];
+        const question = String((entry as any).question ?? '').trim();
+        const answer = String((entry as any).answer ?? '').trim();
+        return question && answer ? [{ question, answer }] : [];
+      });
+    }
+  }
+  return normalized;
 }
 
 const aiJsonSchema = catalogItemSchema.pick({
