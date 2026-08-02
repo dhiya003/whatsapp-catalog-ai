@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "WhatsApp Catalog AI Monitor",
+  "version": "0.1.0",
+  "description": "Conservative selected-group WhatsApp Web monitor for local catalog review.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:3737/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
