@@ -51,4 +51,15 @@ describe('backend AI extraction and API validation', () => {
     expect(bad.statusCode).toBeGreaterThanOrEqual(400);
     await app.close();
   });
+
+  it('regenerates an existing item while preserving its product code', async () => {
+    process.env.DATA_FILE = `${process.cwd()}/data/test-enrich-${Date.now()}.json`;
+    const app = await buildServer();
+    const post = await app.inject({ method: 'POST', url: '/api/messages', payload: { sourceGroupId: 'g', sourceGroupTitle: 'Group', messageId: 'enrich-m', text: 'Blue cotton kurti\n₹900' } });
+    const item = post.json().item;
+    const enriched = await app.inject({ method: 'POST', url: `/api/items/${item.id}/enrich` });
+    expect(enriched.statusCode).toBe(200);
+    expect(enriched.json().productCode).toBe(item.productCode);
+    await app.close();
+  });
 });

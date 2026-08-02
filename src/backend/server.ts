@@ -35,6 +35,23 @@ export async function buildServer() {
     const item = await store.update(id, patch);
     return item ?? reply.code(404).send({ error: 'not found' });
   });
+  app.post('/api/items/:id/enrich', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const existing = (await store.list()).find((item) => item.id === id);
+    if (!existing) return reply.code(404).send({ error: 'not found' });
+    const enriched = await extractWithAiProvider({
+      sourceGroupId: existing.sourceGroupId,
+      sourceGroupTitle: existing.sourceGroupTitle,
+      messageId: existing.sourceMessageId,
+      timestamp: existing.sourceTimestamp,
+      text: existing.description || existing.longDescription || existing.title,
+      imageDataUrl: existing.imageDataUrl
+    });
+    if (!enriched) return reply.code(422).send({ error: 'could not enrich item' });
+    const { id: _id, sourceMessageId: _messageId, sourceGroupId: _groupId, sourceGroupTitle: _groupTitle, createdAt: _createdAt, ...patch } = enriched;
+    const updated = await store.update(id, { ...patch, productCode: existing.productCode, status: existing.status });
+    return updated;
+  });
   app.get('/api/export.csv', async (_req, reply) => reply.header('content-type', 'text/csv').send(toCsv(await store.list())));
   app.get('/api/export.xls', async (_req, reply) => reply.header('content-type', 'application/vnd.ms-excel').send(toExcelHtml(await store.list())));
   return app;

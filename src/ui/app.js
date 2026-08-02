@@ -291,6 +291,23 @@ async function updateStatus(id, status) {
   }
 }
 
+async function enrichItem(id) {
+  updateStateMessage('Generating structured apparel content with AI...', 'loading');
+  try {
+    const response = await fetch(`/api/items/${encodeURIComponent(id)}/enrich`, { method: 'POST' });
+    if (!response.ok) throw new Error(`AI enrichment failed with ${response.status}`);
+    const updated = await response.json();
+    state.items = state.items.map(item => String(item.id) === String(id) ? { ...item, ...updated } : item);
+    renderCategoryOptions();
+    renderCatalog();
+    if (String(state.selectedId) === String(id)) fillForm(selectedItem());
+    updateStateMessage(`AI enrichment completed with ${updated.aiProvider || 'configured provider'}.`, 'success');
+    setTimeout(() => updateStateMessage('', 'info'), 2400);
+  } catch (error) {
+    updateStateMessage(error.message, 'error');
+  }
+}
+
 els.search.addEventListener('input', event => {
   state.filters.query = event.target.value;
   renderCatalog();
@@ -338,7 +355,8 @@ els.form.addEventListener('click', event => {
   const action = event.target.dataset.action;
   const item = selectedItem();
   if (!action || !item) return;
-  updateStatus(item.id, action === 'approve' ? 'approved' : 'rejected');
+  if (action === 'enrich') enrichItem(item.id);
+  else updateStatus(item.id, action === 'approve' ? 'approved' : 'rejected');
 });
 
 els.closeDrawer.addEventListener('click', closeDrawer);
