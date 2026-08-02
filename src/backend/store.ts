@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { CatalogItem } from '../core/types.js';
-import { dedupeItems } from '../core/parser.js';
+import { dedupeItems, upgradeLegacyItem } from '../core/parser.js';
 
 export class JsonCatalogStore {
   private operation: Promise<unknown> = Promise.resolve();
@@ -16,7 +16,7 @@ export class JsonCatalogStore {
   private async readUnsafe(): Promise<CatalogItem[]> {
     try {
       const raw = await readFile(this.file, 'utf8');
-      return JSON.parse(raw) as CatalogItem[];
+      return (JSON.parse(raw) as Array<Partial<CatalogItem> & Record<string, any>>).map(upgradeLegacyItem);
     } catch (error: any) {
       if (error?.code === 'ENOENT') return [];
       throw error;

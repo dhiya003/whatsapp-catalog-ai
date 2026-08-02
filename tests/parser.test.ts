@@ -33,6 +33,9 @@ describe('catalog parsing fixtures', () => {
   it('infers non-price title lines conservatively', () => {
     expect(inferTitle('Rs. 50\nFresh mango pickle')).toBe('Fresh mango pickle');
   });
+  it('extracts a title when product and price share one line', () => {
+    expect(inferTitle('Royal blue soft silk saree for wedding Rs 1899')).toBe('Royal blue soft silk saree for wedding');
+  });
   it('creates a low-confidence image-only review draft without AI', () => {
     const item = extractCatalogDraft({ sourceGroupId: 'g', sourceGroupTitle: 'Image Group', imageDataUrl: 'data:image/png;base64,aaa', timestamp: '2026-01-02T00:00:00.000Z' });
     expect(item?.title).toBe('Image item awaiting review');

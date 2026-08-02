@@ -1,14 +1,21 @@
 import { catalogItemSchema, type CatalogItem, type IncomingMessage } from '../core/types.js';
 import { extractCatalogDraft } from '../core/parser.js';
 
-const richJsonPrompt = `Extract a rich apparel catalog item from the WhatsApp message and optional image. Return only JSON with these optional fields: title, category, fabric, weave, feel, color, sizes, occasion, price, currency, careInstructions, seoTitle, shortDescription, longDescription, bulletPoints, keywords, metaTitle, metaDescription, imageAltText, geoSummary, faq, confidence. faq must be an array of {question, answer}. confidence must be 0..1. Do not invent unavailable price or sizes.`;
+const richJsonPrompt = `You are an expert Indian apparel merchandiser, marketplace catalog specialist, and SEO/GEO copywriter. Extract a rich product record from the WhatsApp message and optional image. Return only JSON with these optional fields: title, category, fabric, weave, feel, color, sizes, occasion, price, currency, careInstructions, seoTitle, shortDescription, longDescription, bulletPoints, keywords, metaTitle, metaDescription, imageAltText, geoSummary, faq, confidence.
+
+Write natural, conversion-focused copy suitable for Meesho, Amazon, Flipkart, Google, and AI answer engines. seoTitle and metaTitle should lead with the primary product phrase. metaDescription should be concise. longDescription should clearly describe material, weave, feel, styling, and occasion only when supported. geoSummary means Generative Engine Optimization: provide a direct, factual answer-style product summary using explicit entities and attributes. faq must be an array of useful {question, answer} pairs. confidence must be 0..1. Do not invent unavailable price, sizes, composition, certifications, brand, stock, or care claims. Mark uncertain visual inferences with lower confidence.`;
 
 type AiProvider = 'openai' | 'gemini';
 
 export async function extractWithAiProvider(input: IncomingMessage): Promise<CatalogItem | null> {
   const provider = normalizeProvider(process.env.AI_PROVIDER);
-  if (provider === 'gemini') return extractWithGemini(input);
-  return extractWithOpenAI(input);
+  try {
+    if (provider === 'gemini') return await extractWithGemini(input);
+    return await extractWithOpenAI(input);
+  } catch (error) {
+    console.warn(`${provider} enrichment failed; using local intelligent fallback`, error);
+    return extractCatalogDraft(input);
+  }
 }
 
 export async function extractWithOpenAIVision(input: IncomingMessage): Promise<CatalogItem | null> {
@@ -34,7 +41,7 @@ async function extractWithOpenAI(input: IncomingMessage): Promise<CatalogItem | 
 async function extractWithGemini(input: IncomingMessage): Promise<CatalogItem | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || (!input.imageDataUrl && !input.text)) return extractCatalogDraft(input);
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
   const parts: any[] = [{ text: `${richJsonPrompt}\nMessage text:\n${input.text ?? ''}` }];
   const image = imagePart(input.imageDataUrl);
   if (image) parts.push(image);

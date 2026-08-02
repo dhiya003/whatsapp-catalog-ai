@@ -7,7 +7,7 @@
     "dev": "tsx src/backend/server.ts",
     "build": "tsc && node scripts/copy-static.mjs",
     "test": "vitest run --exclude \"dist/**\" --exclude \"tests/**/*.js\"",
-    "start": "node dist/backend/server.js"
+    "start": "node --env-file-if-exists=.env dist/backend/server.js"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",

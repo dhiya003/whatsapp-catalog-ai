@@ -24,7 +24,7 @@ export async function buildServer() {
   app.get('/api/items', async () => store.list());
   app.post('/api/messages', async (request, reply) => {
     const input = incomingSchema.parse(request.body);
-    const item = input.imageDataUrl ? await extractWithAiProvider(input) : extractCatalogDraft(input);
+    const item = await extractWithAiProvider(input);
     if (!item) return reply.code(202).send({ accepted: false });
     await store.upsert([item]);
     return { accepted: true, item };

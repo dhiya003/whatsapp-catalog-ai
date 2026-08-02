@@ -60,7 +60,7 @@ export function extractCatalogDraft(input: IncomingMessage): CatalogItem | null 
     fabric ? `${capitalize(fabric)} fabric` : undefined
   ].filter(Boolean) as string[]).slice(0, 5);
   const careInstructions = inferCareInstructions(fabric);
-  const geoSummary = `Sourced from WhatsApp group ${input.sourceGroupTitle}${input.timestamp ? ` on ${input.timestamp}` : ''}.`;
+  const geoSummary = `${displayTitle} is ${[color, fabric, weave, category].filter(Boolean).join(' ') || 'an apparel product'}${occasion ? ` designed for ${occasion} occasions` : ''}${price ? ` with a listed price of ${price}` : ''}. Review seller-confirmed specifications before purchase.`;
 
   return {
     id: createHash('sha256').update(`${input.sourceGroupId}:${sourceMessageId}`).digest('hex').slice(0, 16),
@@ -105,7 +105,8 @@ export function extractCatalogDraft(input: IncomingMessage): CatalogItem | null 
 }
 
 export function inferTitle(text: string): string {
-  const line = text.split(/\r?\n/).map((l) => l.trim()).find((l) => l && !PRICE_RE.test(l));
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const line = lines.find((candidate) => !PRICE_RE.test(candidate)) || lines.map((candidate) => candidate.replace(PRICE_RE, '').replace(/[-–—|:]+\s*$/, '').trim()).find(Boolean);
   if (!line) return '';
   return line.replace(/^[*\-•\s]+|[*\s]+$/g, '').slice(0, 120);
 }
@@ -118,6 +119,34 @@ export function dedupeItems(existing: CatalogItem[], incoming: CatalogItem[]): C
     byKey.set(key, prev ? { ...prev, ...item, id: prev.id, createdAt: prev.createdAt, updatedAt: new Date().toISOString() } : item);
   }
   return [...byKey.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export function upgradeLegacyItem(item: Partial<CatalogItem> & Record<string, any>): CatalogItem {
+  if (item.productCode && item.confidence !== undefined && Array.isArray(item.keywords)) return item as CatalogItem;
+  const upgraded = extractCatalogDraft({
+    sourceGroupId: item.sourceGroupId || 'legacy',
+    sourceGroupTitle: item.sourceGroupTitle || 'Legacy Catalog',
+    messageId: item.sourceMessageId,
+    timestamp: item.sourceTimestamp || item.createdAt,
+    text: item.description || item.title,
+    imageDataUrl: item.imageDataUrl
+  });
+  if (!upgraded) throw new Error(`Unable to upgrade legacy catalog item ${item.id || 'unknown'}`);
+  return {
+    ...upgraded,
+    ...item,
+    id: item.id || upgraded.id,
+    productCode: item.productCode || upgraded.productCode,
+    sourceTimestamp: item.sourceTimestamp || upgraded.sourceTimestamp,
+    sizes: item.sizes || upgraded.sizes,
+    careInstructions: item.careInstructions || upgraded.careInstructions,
+    bulletPoints: item.bulletPoints || upgraded.bulletPoints,
+    keywords: item.keywords || upgraded.keywords,
+    faq: item.faq || upgraded.faq,
+    confidence: item.confidence ?? upgraded.confidence,
+    aiProvider: item.aiProvider || upgraded.aiProvider,
+    extractedBy: item.extractedBy || upgraded.extractedBy
+  } as CatalogItem;
 }
 
 function inferCurrency(price?: string): string | undefined {

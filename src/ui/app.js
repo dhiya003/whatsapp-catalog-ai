@@ -33,8 +33,9 @@ const els = {
   }
 };
 
-const editableFields = ['title', 'price', 'description', 'status'];
-const richFields = ['productCode', 'category', 'fabric', 'weave', 'feel', 'color', 'sizes', 'occasion', 'aiProvider', 'longDescription', 'bulletPoints', 'seoTitle', 'metaTitle', 'metaDescription', 'keywords', 'imageAltText', 'geoSummary'];
+const editableFields = ['title', 'price', 'status', 'category', 'fabric', 'weave', 'feel', 'color', 'sizes', 'occasion', 'shortDescription', 'longDescription', 'bulletPoints', 'careInstructions', 'seoTitle', 'metaTitle', 'metaDescription', 'keywords', 'imageAltText', 'geoSummary'];
+const richFields = ['productCode', 'category', 'fabric', 'weave', 'feel', 'color', 'sizes', 'occasion', 'aiProvider', 'shortDescription', 'longDescription', 'bulletPoints', 'careInstructions', 'seoTitle', 'metaTitle', 'metaDescription', 'keywords', 'imageAltText', 'geoSummary'];
+const arrayFields = new Set(['sizes', 'bulletPoints', 'careInstructions', 'keywords']);
 
 function esc(value = '') {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -230,7 +231,7 @@ function fillForm(item) {
   editableFields.forEach(field => {
     const input = els.form.elements[field];
     if (!input) return;
-    input.value = field === 'description' ? itemDescription(item) : asText(field === 'status' ? statusOf(item) : item[field], '');
+    input.value = asText(field === 'status' ? statusOf(item) : item[field], '');
   });
 
   richFields.forEach(field => {
@@ -318,7 +319,10 @@ els.form.addEventListener('submit', async event => {
   event.preventDefault();
   const item = selectedItem();
   if (!item) return;
-  const patch = Object.fromEntries(editableFields.map(field => [field, els.form.elements[field]?.value ?? '']));
+  const patch = Object.fromEntries(editableFields.map(field => {
+    const value = els.form.elements[field]?.value ?? '';
+    return [field, arrayFields.has(field) ? value.split(/[\n,]+/).map(entry => entry.trim()).filter(Boolean) : value];
+  }));
   updateStateMessage('Saving product edits...', 'loading');
   try {
     await patchItem(item.id, patch);
