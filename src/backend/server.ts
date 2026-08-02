@@ -13,7 +13,7 @@ const incomingSchema = z.object({
 });
 
 export async function buildServer() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 15 * 1024 * 1024 });
   const store = new JsonCatalogStore(process.env.DATA_FILE || './data/catalog.json');
   await app.register(staticPlugin, { root: resolve('dist/ui'), prefix: '/' });
   app.get('/api/items', async () => store.list());
