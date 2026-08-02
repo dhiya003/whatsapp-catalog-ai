@@ -2,7 +2,9 @@ let observedGroupTitles = [];
 let seen = new Set();
 
 function currentChatTitle() {
-  return document.querySelector('header [title]')?.getAttribute('title') || document.querySelector('header span[dir="auto"]')?.textContent?.trim() || '';
+  const header = document.querySelector('#main header') || document.querySelector('header');
+  const candidates = [...(header?.querySelectorAll('span[title], [data-testid="conversation-info-header-chat-title"], span[dir="auto"]') || [])];
+  return candidates.map((node) => node.getAttribute('title') || node.textContent?.trim() || '').find(Boolean) || '';
 }
 function groupId(title) { return `wa-title:${title.toLowerCase().replace(/\s+/g, '-')}`; }
 function messageNodes() { return [...document.querySelectorAll('[data-id], div.message-in, div.message-out')].slice(-30); }
