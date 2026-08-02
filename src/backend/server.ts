@@ -4,8 +4,9 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 import { JsonCatalogStore } from './store.js';
 import { extractCatalogDraft } from '../core/parser.js';
-import { extractWithOpenAIVision } from './openaiVision.js';
+import { extractWithAiProvider } from './openaiVision.js';
 import { toCsv, toExcelHtml } from './exporters.js';
+import { richCatalogPatchSchema } from '../core/types.js';
 
 const incomingSchema = z.object({
   sourceGroupId: z.string().min(1), sourceGroupTitle: z.string().min(1), messageId: z.string().optional(),
@@ -14,19 +15,23 @@ const incomingSchema = z.object({
 
 export async function buildServer() {
   const app = Fastify({ logger: true, bodyLimit: 15 * 1024 * 1024 });
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof z.ZodError) return reply.code(400).send({ error: 'validation failed', issues: error.issues });
+    return reply.send(error);
+  });
   const store = new JsonCatalogStore(process.env.DATA_FILE || './data/catalog.json');
   await app.register(staticPlugin, { root: resolve('dist/ui'), prefix: '/' });
   app.get('/api/items', async () => store.list());
   app.post('/api/messages', async (request, reply) => {
     const input = incomingSchema.parse(request.body);
-    const item = input.imageDataUrl ? await extractWithOpenAIVision(input) : extractCatalogDraft(input);
+    const item = input.imageDataUrl ? await extractWithAiProvider(input) : extractCatalogDraft(input);
     if (!item) return reply.code(202).send({ accepted: false });
     await store.upsert([item]);
     return { accepted: true, item };
   });
   app.patch('/api/items/:id', async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
-    const patch = z.object({ title: z.string().optional(), price: z.string().optional(), description: z.string().optional(), status: z.enum(['pending','approved','rejected']).optional() }).parse(request.body);
+    const patch = richCatalogPatchSchema.parse(request.body);
     const item = await store.update(id, patch);
     return item ?? reply.code(404).send({ error: 'not found' });
   });

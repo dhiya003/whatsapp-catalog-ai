@@ -1,25 +1,118 @@
-import type { CatalogItem, IncomingMessage } from '../core/types.js';
+import { catalogItemSchema, type CatalogItem, type IncomingMessage } from '../core/types.js';
 import { extractCatalogDraft } from '../core/parser.js';
 
+const richJsonPrompt = `Extract a rich apparel catalog item from the WhatsApp message and optional image. Return only JSON with these optional fields: title, category, fabric, weave, feel, color, sizes, occasion, price, currency, careInstructions, seoTitle, shortDescription, longDescription, bulletPoints, keywords, metaTitle, metaDescription, imageAltText, geoSummary, faq, confidence. faq must be an array of {question, answer}. confidence must be 0..1. Do not invent unavailable price or sizes.`;
+
+type AiProvider = 'openai' | 'gemini';
+
+export async function extractWithAiProvider(input: IncomingMessage): Promise<CatalogItem | null> {
+  const provider = normalizeProvider(process.env.AI_PROVIDER);
+  if (provider === 'gemini') return extractWithGemini(input);
+  return extractWithOpenAI(input);
+}
+
 export async function extractWithOpenAIVision(input: IncomingMessage): Promise<CatalogItem | null> {
+  return extractWithAiProvider(input);
+}
+
+async function extractWithOpenAI(input: IncomingMessage): Promise<CatalogItem | null> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !input.imageDataUrl) return extractCatalogDraft(input);
-  const model = process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini';
+  if (!apiKey || (!input.imageDataUrl && !input.text)) return extractCatalogDraft(input);
+  const model = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const content: any[] = [{ type: 'text', text: `${richJsonPrompt}\nMessage text:\n${input.text ?? ''}` }];
+  if (input.imageDataUrl) content.push({ type: 'image_url', image_url: { url: input.imageDataUrl } });
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: [
-        { type: 'text', text: 'Extract a product title, price, and short description from this catalog image/message. Return strict JSON.' },
-        { type: 'image_url', image_url: { url: input.imageDataUrl } }
-      ] }],
-      response_format: { type: 'json_object' }
-    })
+    body: JSON.stringify({ model, messages: [{ role: 'user', content }], response_format: { type: 'json_object' } })
   });
-  if (!response.ok) throw new Error(`OpenAI vision failed: ${response.status}`);
+  if (!response.ok) throw new Error(`OpenAI extraction failed: ${response.status}`);
   const data: any = await response.json();
-  const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
-  const base = extractCatalogDraft({ ...input, text: [parsed.title, parsed.price, parsed.description].filter(Boolean).join('\n') });
-  return base ? { ...base, extractedBy: 'openai-vision', title: parsed.title || base.title, price: parsed.price || base.price, description: parsed.description || base.description } : null;
+  return mergeAiJson(input, parseJsonObject(data.choices?.[0]?.message?.content), 'openai');
+}
+
+async function extractWithGemini(input: IncomingMessage): Promise<CatalogItem | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || (!input.imageDataUrl && !input.text)) return extractCatalogDraft(input);
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const parts: any[] = [{ text: `${richJsonPrompt}\nMessage text:\n${input.text ?? ''}` }];
+  const image = imagePart(input.imageDataUrl);
+  if (image) parts.push(image);
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json' } })
+  });
+  if (!response.ok) throw new Error(`Gemini extraction failed: ${response.status}`);
+  const data: any = await response.json();
+  return mergeAiJson(input, parseJsonObject(data.candidates?.[0]?.content?.parts?.[0]?.text), 'gemini');
+}
+
+function mergeAiJson(input: IncomingMessage, raw: unknown, provider: AiProvider): CatalogItem | null {
+  const base = extractCatalogDraft(input);
+  if (!base) return null;
+  const parsed = aiJsonSchema.safeParse(raw);
+  if (!parsed.success) return { ...base, aiProvider: 'rules', extractedBy: 'rules', confidence: Math.min(base.confidence, 0.4) };
+  const candidate = {
+    ...base,
+    ...dropUndefined(parsed.data),
+    id: base.id,
+    sourceMessageId: base.sourceMessageId,
+    sourceGroupId: base.sourceGroupId,
+    sourceGroupTitle: base.sourceGroupTitle,
+    sourceTimestamp: base.sourceTimestamp,
+    productCode: base.productCode,
+    imageDataUrl: base.imageDataUrl,
+    status: base.status,
+    aiProvider: provider,
+    extractedBy: provider,
+    createdAt: base.createdAt,
+    updatedAt: base.updatedAt,
+    confidence: parsed.data.confidence ?? Math.max(base.confidence, 0.78)
+  };
+  return catalogItemSchema.parse(candidate);
+}
+
+const aiJsonSchema = catalogItemSchema.pick({
+  title: true,
+  category: true,
+  fabric: true,
+  weave: true,
+  feel: true,
+  color: true,
+  sizes: true,
+  occasion: true,
+  price: true,
+  currency: true,
+  careInstructions: true,
+  seoTitle: true,
+  shortDescription: true,
+  longDescription: true,
+  bulletPoints: true,
+  keywords: true,
+  metaTitle: true,
+  metaDescription: true,
+  imageAltText: true,
+  geoSummary: true,
+  faq: true,
+  confidence: true
+}).partial().strict();
+
+function normalizeProvider(value?: string): AiProvider {
+  return value?.toLowerCase() === 'gemini' ? 'gemini' : 'openai';
+}
+
+function parseJsonObject(value: unknown): unknown {
+  if (typeof value !== 'string') return value ?? {};
+  try { return JSON.parse(value); } catch { return {}; }
+}
+
+function dropUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+function imagePart(dataUrl?: string): any | undefined {
+  const match = dataUrl?.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) return undefined;
+  return { inlineData: { mimeType: match[1], data: match[2] } };
 }

@@ -7,7 +7,8 @@ A local-first MVP for monitoring a user-selected WhatsApp Web group, extracting 
 - Manifest V3 Chrome extension in `extension/`.
 - Conservative DOM-only monitoring of an explicit list of selected chat titles.
 - Local Node TypeScript backend using durable JSON storage.
-- Server-side OpenAI Vision extraction when `OPENAI_API_KEY` is set. Tests do not call OpenAI.
+- Rich apparel catalog data model with deterministic product codes, apparel attributes, SEO metadata, bullets, FAQ, geo/source summary, confidence, and provider attribution.
+- Server-side structured AI extraction with `AI_PROVIDER=openai|gemini` when the matching API key is set. Tests mock provider responses and never call external APIs.
 - Review web UI with approve/reject/edit fields.
 - CSV and Excel-compatible HTML export endpoints.
 - Fixture-based parser and deduplication tests.
@@ -34,9 +35,8 @@ The extension stores an independent successful-scan checkpoint for every selecte
 - It is brittle because WhatsApp Web DOM selectors can change.
 - WhatsApp Web lazily renders history, so the MVP automatically captures new messages and currently visible history, not every old message without opening and scrolling a group.
 - Image posts are supported. Video file/frame extraction is a planned follow-up; accompanying video captions are captured today.
-- Ensure you have consent and a lawful basis before processing group messages or images.
-- OpenAI Vision sends image/message content externally only when a server-side `OPENAI_API_KEY` is configured and an image item is submitted.
-- Tests use local fixtures only and do not interact with WhatsApp Web or external APIs.
+- AI extraction sends image/message content externally only when `AI_PROVIDER` is configured with a matching server-side API key: `OPENAI_API_KEY` for OpenAI or `GEMINI_API_KEY` for Gemini. Without a key, the backend uses deterministic local rule fallback.
+- Tests use local fixtures and mocked provider responses only. They do not interact with WhatsApp Web, OpenAI, Gemini, or other external APIs.
 
 ## Development
 
@@ -47,3 +47,23 @@ npm run dev
 ```
 
 Data is stored in `DATA_FILE`, defaulting to `./data/catalog.json`.
+
+### Backend catalog data
+
+The backend stores one rich `CatalogItem` per source message. Each item includes source identifiers and timestamp, a deterministic `productCode` generated from the WhatsApp group title plus a stable hash suffix, apparel fields (`category`, `fabric`, `weave`, `feel`, `color`, `sizes`, `occasion`), commercial fields (`price`, `currency`, care instructions), SEO/content fields (`seoTitle`, short and long descriptions, bullets, keywords, meta title/description, image alt text, FAQ), provenance (`geoSummary`, `confidence`, `aiProvider`), review status, and timestamps.
+
+`POST /api/messages` first builds a deterministic local rule draft. For image or AI-enabled inputs, the selected provider may enrich the draft, but provider JSON is schema-validated before merging. Invalid or unavailable provider output falls back to rules. `PATCH /api/items/:id` accepts editable rich catalog fields and rejects immutable source fields such as `id`, `sourceGroupId`, and `sourceMessageId`.
+
+### Backend AI configuration
+
+```bash
+AI_PROVIDER=openai # or gemini
+OPENAI_API_KEY=...
+GEMINI_API_KEY=...
+```
+
+If `AI_PROVIDER=gemini`, set `GEMINI_API_KEY`. Otherwise OpenAI is used when `OPENAI_API_KEY` is present. `OPENAI_MODEL`, `OPENAI_VISION_MODEL`, and `GEMINI_MODEL` can override defaults. Tests mock `fetch` and never make external provider calls.
+
+### Backend export
+
+`GET /api/export.csv` and `GET /api/export.xls` include the rich catalog columns, including product code, apparel attributes, SEO fields, FAQ, confidence, provider, status, and timestamps. Array fields are flattened with ` | ` for spreadsheet readability.
