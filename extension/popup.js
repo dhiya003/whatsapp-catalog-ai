@@ -1,5 +1,6 @@
 const status = document.getElementById('status');
 const message = document.getElementById('message');
+const scanStatus = document.getElementById('scanStatus');
 function save(titles) { chrome.storage.local.set({ observedGroupTitles: titles }, () => render(titles)); }
 function render(titles) {
   status.replaceChildren();
@@ -40,6 +41,21 @@ chrome.storage.local.get(['observedGroupTitles'], (v) => render(v.observedGroupT
 chrome.storage.local.get(['autoScanEnabled', 'autoScanSeconds'], (v) => {
   document.getElementById('autoScan').checked = Boolean(v.autoScanEnabled);
   document.getElementById('seconds').value = Math.max(10, Number(v.autoScanSeconds) || 15);
+});
+function renderScanStatus(statuses) {
+  scanStatus.replaceChildren();
+  const recent = Object.values(statuses || {}).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 12);
+  if (!recent.length) scanStatus.textContent = 'No groups scanned yet.';
+  for (const entry of recent) {
+    const row = document.createElement('div');
+    row.style.cssText = 'font-size:12px;margin:5px 0';
+    row.textContent = `${entry.title}: ${entry.state}${entry.captured ? `, ${entry.captured} captured` : ''}`;
+    scanStatus.append(row);
+  }
+}
+chrome.storage.local.get(['groupScanStatus'], (v) => renderScanStatus(v.groupScanStatus));
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.groupScanStatus) renderScanStatus(changes.groupScanStatus.newValue);
 });
 document.getElementById('autoScan').onchange = (event) => chrome.storage.local.set({ autoScanEnabled: event.target.checked });
 document.getElementById('seconds').onchange = (event) => chrome.storage.local.set({ autoScanSeconds: Math.max(10, Number(event.target.value) || 15) });

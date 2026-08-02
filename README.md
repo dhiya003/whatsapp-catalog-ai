@@ -25,6 +25,8 @@ Open <http://127.0.0.1:3737> for review. Load `extension/` as an unpacked extens
 
 Enable **Cycle through selected groups** to let the extension visibly open each selected chat in sequence. Keep WhatsApp Web in a dedicated visible window because Chrome throttles or pauses DOM automation in hidden tabs and the cycling changes the active conversation.
 
+The extension stores an independent successful-scan checkpoint for every selected group. If scanning is interrupted, the next cycle scrolls backward to that checkpoint, processes missed messages first, returns to the latest messages, and only then advances the checkpoint. A newly added group starts from the beginning of the current local day rather than importing its entire lifetime by default.
+
 ## Safety and risk disclosures
 
 - This extension does not request cookies, credentials, or broad browser history.
