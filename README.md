@@ -23,6 +23,8 @@ npm start
 
 Open <http://127.0.0.1:3737> for review. Load `extension/` as an unpacked extension in Chrome, open WhatsApp Web yourself, then visit each group and click **Add current chat** in the extension popup. The extension captures new or currently rendered text and images while a selected chat is open. Keep WhatsApp Web open for continuous monitoring.
 
+Enable **Cycle through selected groups** to let the extension visibly open each selected chat in sequence. Keep WhatsApp Web in a dedicated visible window because Chrome throttles or pauses DOM automation in hidden tabs and the cycling changes the active conversation.
+
 ## Safety and risk disclosures
 
 - This extension does not request cookies, credentials, or broad browser history.

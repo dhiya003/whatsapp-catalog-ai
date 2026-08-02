@@ -1,4 +1,8 @@
 let observedGroupTitles = [];
+let autoScanEnabled = false;
+let autoScanSeconds = 15;
+let autoScanIndex = 0;
+let autoScanBusy = false;
 let seen = new Set();
 
 function currentChatTitle() {
@@ -49,7 +53,63 @@ async function scan() {
     postMessage({ sourceGroupId: groupId(title), sourceGroupTitle: title, messageId, text, imageDataUrl, timestamp: new Date().toISOString() });
   }
 }
-chrome.storage.local.get(['observedGroupTitles'], (v) => { observedGroupTitles = v.observedGroupTitles || []; });
-chrome.storage.onChanged.addListener((changes) => { if (changes.observedGroupTitles) { observedGroupTitles = changes.observedGroupTitles.newValue || []; seen = new Set(); } });
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+function findChatTitle(title) {
+  const nodes = [...document.querySelectorAll('#pane-side span[title], #side span[title]')];
+  return nodes.find((node) => node.getAttribute('title') === title);
+}
+function searchBox() {
+  return document.querySelector('#side div[contenteditable="true"][role="textbox"]') ||
+    document.querySelector('#side div[contenteditable="true"]');
+}
+function replaceEditableText(element, text) {
+  element.focus();
+  document.execCommand('selectAll', false);
+  document.execCommand('insertText', false, text);
+  element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+}
+async function openChat(title) {
+  let target = findChatTitle(title);
+  if (!target) {
+    const search = searchBox();
+    if (!search) return false;
+    replaceEditableText(search, title);
+    await delay(1200);
+    target = findChatTitle(title);
+  }
+  if (!target) return false;
+  (target.closest('[role="listitem"], [data-testid="cell-frame-container"]') || target).click();
+  await delay(1800);
+  return currentChatTitle() === title;
+}
+async function autoScanNext() {
+  if (!autoScanEnabled || autoScanBusy || !observedGroupTitles.length || document.visibilityState !== 'visible') return;
+  autoScanBusy = true;
+  try {
+    const title = observedGroupTitles[autoScanIndex % observedGroupTitles.length];
+    autoScanIndex = (autoScanIndex + 1) % observedGroupTitles.length;
+    if (await openChat(title)) await scan();
+  } finally {
+    autoScanBusy = false;
+  }
+}
+chrome.storage.local.get(['observedGroupTitles', 'autoScanEnabled', 'autoScanSeconds'], (v) => {
+  observedGroupTitles = v.observedGroupTitles || [];
+  autoScanEnabled = Boolean(v.autoScanEnabled);
+  autoScanSeconds = Math.max(10, Number(v.autoScanSeconds) || 15);
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.observedGroupTitles) { observedGroupTitles = changes.observedGroupTitles.newValue || []; seen = new Set(); autoScanIndex = 0; }
+  if (changes.autoScanEnabled) autoScanEnabled = Boolean(changes.autoScanEnabled.newValue);
+  if (changes.autoScanSeconds) autoScanSeconds = Math.max(10, Number(changes.autoScanSeconds.newValue) || 15);
+});
 new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
 setInterval(scan, 5000);
+let lastAutoScanAt = 0;
+setInterval(() => {
+  const now = Date.now();
+  if (autoScanEnabled && now - lastAutoScanAt >= autoScanSeconds * 1000) {
+    lastAutoScanAt = now;
+    autoScanNext();
+  }
+}, 1000);

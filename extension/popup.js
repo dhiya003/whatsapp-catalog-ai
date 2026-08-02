@@ -37,6 +37,12 @@ function addTitle(title) {
   });
 }
 chrome.storage.local.get(['observedGroupTitles'], (v) => render(v.observedGroupTitles || []));
+chrome.storage.local.get(['autoScanEnabled', 'autoScanSeconds'], (v) => {
+  document.getElementById('autoScan').checked = Boolean(v.autoScanEnabled);
+  document.getElementById('seconds').value = Math.max(10, Number(v.autoScanSeconds) || 15);
+});
+document.getElementById('autoScan').onchange = (event) => chrome.storage.local.set({ autoScanEnabled: event.target.checked });
+document.getElementById('seconds').onchange = (event) => chrome.storage.local.set({ autoScanSeconds: Math.max(10, Number(event.target.value) || 15) });
 document.getElementById('select').onclick = async () => {
   const title = await currentTitle();
   if (!title) return message.textContent = 'Could not detect this chat. Enter its exact title below.';
@@ -53,4 +59,7 @@ document.getElementById('remove').onclick = async () => {
     save(titles);
   });
 };
-document.getElementById('stop').onclick = () => chrome.storage.local.remove('observedGroupTitles', () => render([]));
+document.getElementById('stop').onclick = () => chrome.storage.local.set({ observedGroupTitles: [], autoScanEnabled: false }, () => {
+  document.getElementById('autoScan').checked = false;
+  render([]);
+});
