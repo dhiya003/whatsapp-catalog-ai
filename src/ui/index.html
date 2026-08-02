@@ -1,1 +1,125 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Catalog Review</title><link rel="stylesheet" href="style.css"></head><body><main><h1>Catalog Review</h1><p>Review locally captured draft catalog items before export.</p><p><a href="/api/export.csv">CSV</a> <a href="/api/export.xls">Excel-compatible XLS</a></p><section id="items"></section></main><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Apparel Catalog Workspace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#catalogGrid">Skip to catalog</a>
+
+  <header class="hero">
+    <nav class="topbar" aria-label="Workspace navigation">
+      <div class="brand" aria-label="Catalog Review home">
+        <span class="brand-mark" aria-hidden="true">CA</span>
+        <span>
+          <strong>Catalog Atelier</strong>
+          <small>Apparel review workspace</small>
+        </span>
+      </div>
+      <div class="topbar-actions" aria-label="Export controls">
+        <a class="button ghost" href="/api/export.csv">Export CSV</a>
+        <a class="button primary" href="/api/export.xls">Export XLS</a>
+      </div>
+    </nav>
+
+    <section class="hero-grid" aria-labelledby="workspaceTitle">
+      <div>
+        <p class="eyebrow">Merchandising pipeline</p>
+        <h1 id="workspaceTitle">Review, enrich, and approve apparel catalog items.</h1>
+        <p class="hero-copy">A responsive command center for WhatsApp-sourced garments, AI metadata, image checks, and export-ready approvals.</p>
+      </div>
+      <div class="hero-panel" aria-label="Workspace summary">
+        <span class="pulse" aria-hidden="true"></span>
+        <div>
+          <strong id="heroCount">Loading catalog...</strong>
+          <small id="heroSubcopy">Syncing with /api/items</small>
+        </div>
+      </div>
+    </section>
+  </header>
+
+  <main class="shell">
+    <section class="metrics" aria-label="Dashboard metrics">
+      <article class="metric-card"><span>Total SKUs</span><strong id="metricTotal">0</strong><small>Captured products</small></article>
+      <article class="metric-card"><span>Pending</span><strong id="metricPending">0</strong><small>Needs review</small></article>
+      <article class="metric-card"><span>Approved</span><strong id="metricApproved">0</strong><small>Ready to export</small></article>
+      <article class="metric-card"><span>Avg. confidence</span><strong id="metricConfidence">–</strong><small>AI extraction score</small></article>
+    </section>
+
+    <section class="toolbar" aria-label="Catalog controls">
+      <label class="search-box">
+        <span class="sr-only">Search catalog</span>
+        <input id="searchInput" type="search" placeholder="Search title, SKU, fabric, color, keywords..." autocomplete="off">
+      </label>
+      <div class="filters" role="group" aria-label="Filter catalog">
+        <label>Status<select id="statusFilter"><option value="all">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
+        <label>Category<select id="categoryFilter"><option value="all">All categories</option></select></label>
+        <label>View<select id="viewMode"><option value="cards">Cards</option><option value="table">Table</option></select></label>
+      </div>
+    </section>
+
+    <div id="stateMessage" class="state-message" role="status" aria-live="polite"></div>
+
+    <section id="catalogGrid" class="catalog-grid" aria-label="Product cards"></section>
+
+    <section id="catalogTableWrap" class="table-wrap hidden" aria-label="Product table" tabindex="0">
+      <table>
+        <thead><tr><th>Product</th><th>Category</th><th>Fabric</th><th>Price</th><th>Status</th><th>Confidence</th><th>Actions</th></tr></thead>
+        <tbody id="catalogTable"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+  <aside id="editDrawer" class="drawer" aria-labelledby="drawerTitle" aria-modal="true" role="dialog" hidden>
+    <form id="editForm" class="drawer-content">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow">Product detail</p>
+          <h2 id="drawerTitle">Edit item</h2>
+        </div>
+        <button class="icon-button" type="button" id="closeDrawer" aria-label="Close detail drawer">×</button>
+      </div>
+
+      <div id="drawerImage" class="drawer-image"></div>
+
+      <div class="form-grid">
+        <label>Title<input name="title" required></label>
+        <label>Price<input name="price" placeholder="₹2,499"></label>
+        <label>Status<select name="status"><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
+        <label>SKU / product code<input name="productCode" readonly></label>
+        <label>Category<input name="category" readonly></label>
+        <label>Fabric<input name="fabric" readonly></label>
+        <label>Weave<input name="weave" readonly></label>
+        <label>Feel<input name="feel" readonly></label>
+        <label>Color<input name="color" readonly></label>
+        <label>Sizes<input name="sizes" readonly></label>
+        <label>Occasion<input name="occasion" readonly></label>
+        <label>AI provider<input name="aiProvider" readonly></label>
+        <label class="wide">Short description<textarea name="description" rows="3"></textarea></label>
+        <label class="wide">Long description<textarea name="longDescription" rows="4" readonly></textarea></label>
+        <label class="wide">Bullet points<textarea name="bulletPoints" rows="3" readonly></textarea></label>
+        <label class="wide">SEO title<input name="seoTitle" readonly></label>
+        <label class="wide">Meta title<input name="metaTitle" readonly></label>
+        <label class="wide">Meta description<textarea name="metaDescription" rows="3" readonly></textarea></label>
+        <label class="wide">Keywords<input name="keywords" readonly></label>
+        <label class="wide">Image alt text<input name="imageAltText" readonly></label>
+        <label class="wide">Geo summary<textarea name="geoSummary" rows="2" readonly></textarea></label>
+      </div>
+
+      <div class="drawer-meta" id="drawerMeta"></div>
+
+      <div class="drawer-actions">
+        <button type="button" class="button danger" data-action="reject">Reject</button>
+        <button type="button" class="button success" data-action="approve">Approve</button>
+        <button type="submit" class="button primary">Save changes</button>
+      </div>
+    </form>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
