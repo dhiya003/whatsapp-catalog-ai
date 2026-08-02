@@ -59,6 +59,10 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 document.getElementById('autoScan').onchange = (event) => chrome.storage.local.set({ autoScanEnabled: event.target.checked });
 document.getElementById('seconds').onchange = (event) => chrome.storage.local.set({ autoScanSeconds: Math.max(10, Number(event.target.value) || 15) });
+document.getElementById('rescan').onclick = () => chrome.storage.local.set({ groupCheckpoints: {}, groupScanStatus: {}, rescanNonce: Date.now() }, () => {
+  message.textContent = 'Checkpoints reset. Today will be scanned again using the corrected selectors.';
+  renderScanStatus({});
+});
 document.getElementById('select').onclick = async () => {
   const title = await currentTitle();
   if (!title) return message.textContent = 'Could not detect this chat. Enter its exact title below.';

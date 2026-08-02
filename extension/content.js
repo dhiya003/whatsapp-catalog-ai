@@ -21,9 +21,25 @@ function messageNodes(limit) {
   if (!nodes.length) nodes = [...document.querySelectorAll('#main div.message-in, #main div.message-out')];
   return limit ? nodes.slice(-limit) : nodes;
 }
-function textOf(node) { return node.querySelector('[selectable-text], span[dir="auto"]')?.textContent?.trim() || node.textContent?.trim() || ''; }
-function imageOf(node) { return node.querySelector('img[src^="blob:"], img[src^="data:image"]')?.src; }
+function textOf(node) {
+  const copyable = node.matches('[data-pre-plain-text]') ? node : node.querySelector('[data-pre-plain-text]');
+  const messageText = copyable?.querySelector('.selectable-text, [data-testid="selectable-text-copyable"], span.copyable-text');
+  return messageText?.textContent?.trim() || '';
+}
+function productImageOf(node) {
+  const candidates = [...node.querySelectorAll('img[src^="blob:"], img[src^="data:image"]')]
+    .filter((image) => {
+      const alt = `${image.alt || ''} ${image.getAttribute('aria-label') || ''}`.toLowerCase();
+      const width = image.naturalWidth || image.width || image.clientWidth;
+      const height = image.naturalHeight || image.height || image.clientHeight;
+      return !/profile|avatar|sender/.test(alt) && width >= 120 && height >= 120;
+    })
+    .sort((a, b) => ((b.naturalWidth || b.clientWidth) * (b.naturalHeight || b.clientHeight)) - ((a.naturalWidth || a.clientWidth) * (a.naturalHeight || a.clientHeight)));
+  return candidates[0];
+}
+function imageOf(node) { return productImageOf(node)?.src; }
 function metadataOf(node) { return node.getAttribute('data-pre-plain-text') || node.querySelector('[data-pre-plain-text]')?.getAttribute('data-pre-plain-text') || ''; }
+function authorOf(node) { return metadataOf(node).match(/\]\s*([^:]+):\s*$/)?.[1]?.trim(); }
 function timestampOf(node) { return CatalogHistory.parseWhatsAppTimestamp(metadataOf(node), new Date()); }
 function safeId(node, title, text, timestamp) { return node.getAttribute('data-id') || `${title}:${timestamp}:${text.slice(0, 100)}:${node.querySelector('img')?.src?.slice(0, 40) || ''}`; }
 
@@ -67,7 +83,7 @@ async function scanNodes(title, nodes) {
     if (seen.has(messageId) || inFlight.has(messageId) || (!text && !imageUrl)) continue;
     inFlight.add(messageId);
     const imageDataUrl = await toDataUrl(imageUrl);
-    const ok = await postMessage({ sourceGroupId: groupId(title), sourceGroupTitle: title, messageId, text, imageDataUrl, timestamp });
+    const ok = await postMessage({ sourceGroupId: groupId(title), sourceGroupTitle: title, messageId, author: authorOf(node), text, imageDataUrl, timestamp });
     inFlight.delete(messageId);
     if (ok) { seen.add(messageId); captured += 1; }
   }
@@ -191,6 +207,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.autoScanEnabled) autoScanEnabled = Boolean(changes.autoScanEnabled.newValue);
   if (changes.autoScanSeconds) autoScanSeconds = Math.max(10, Number(changes.autoScanSeconds.newValue) || 15);
   if (changes.groupCheckpoints) groupCheckpoints = changes.groupCheckpoints.newValue || {};
+  if (changes.rescanNonce) { seen.clear(); inFlight.clear(); groupCheckpoints = {}; autoScanIndex = 0; }
 });
 new MutationObserver(scanVisible).observe(document.body, { childList: true, subtree: true });
 setInterval(scanVisible, 5000);
