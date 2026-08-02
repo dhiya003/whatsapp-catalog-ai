@@ -83,7 +83,7 @@ async function openChat(title) {
   return currentChatTitle() === title;
 }
 async function autoScanNext() {
-  if (!autoScanEnabled || autoScanBusy || !observedGroupTitles.length || document.visibilityState !== 'visible') return;
+  if (!autoScanEnabled || autoScanBusy || !observedGroupTitles.length) return;
   autoScanBusy = true;
   try {
     const title = observedGroupTitles[autoScanIndex % observedGroupTitles.length];
